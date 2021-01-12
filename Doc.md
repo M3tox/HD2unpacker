@@ -1,17 +1,17 @@
 # Documentation
 
 If you are a programmer, who wants to do something with H&D2 archives, this document might be interesting for you. 
-The ISDM class is used here but it has actually more functions to offer and if my time allows it, I will add more functionalities.
+The ISDM class is used here but it has actually more functions to offer and if my time allows it, I will add more.
 If you have suggestions what could be added, feel free to contact me.
 
-After you have mounted the archive by creating in instance you can
+After you have mounted the archive by creating an instance you can
 access its public methodes, which allow you to:
 - Write table record to text file
 - Write all File headers to text file
 - write a list of all files this archive includes
 - Write all files with 3 overloadings
 - Write a single file
-- Get single files content
+- Get single file (in memory)
 - Get archive file identification name
 - Loopup file index by searching with file Hint (16 bytes size max)
 - Get amount of files in given archive
@@ -59,6 +59,9 @@ IMPORTANT: The buffer is allocated on the heap, so dont forget to delete it when
 
 # const char* GetFileName()
 Returns a pointer to the files identification. Those names are constants. They are independent from the file name and just help to know what archive is mounted.
+
+# const int32_t GetFileIndexByHint(const char*, uint8_t)
+Looks up a file specified in its first argument. Second argument is the string lenth. The HINTS are in the table record and only 16 bytes long. It is not perfect to look the files up here because I noticed that some have the same file name hints. The name you pass it to look up can be longer or shorter than 16 bytes but it will always read from the back to match, so make sure you also add the file extensions (.4ds, .sdr, .etc.).
 
 # uint32_t GetFileCount()
 Returns the number of files inside the mounted archive
