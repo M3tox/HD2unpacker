@@ -1,5 +1,3 @@
-NOTE: Source code will be released soon! I just want to finish a little documentation for programmers.
-
 # What is this?
 
 This is a program which should be able to extract ALL possible .dta files, which are used by the game "Hidden & Dangerous 2" and also its demos.
