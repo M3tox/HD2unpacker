@@ -1,5 +1,6 @@
 // The heart of the unpacker. A single object of the ISDM class defined here
 // is enough to do multiple operations with the files in the archives.
+// But for each archive you want to unpack you need an instance of the ISDM class
 // see the documentation on the GitHub page for detailed information
 #pragma once
 
