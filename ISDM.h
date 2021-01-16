@@ -46,6 +46,7 @@ public:
 	const int32_t GetFileIndexByHint(const char*, uint8_t);
 	
 
+
 	// return total files in given archive
 	uint32_t GetFileCount();
 	// give a char pointer to this to directly get the error message written
@@ -66,28 +67,29 @@ public:
 	// even if the ISDM object is deleted. Might be good to keep data around
 	// in case you wonder why this is public: This is just if you want to export the file content to process it
 	// which can be done with the GetSingleFile function further below
-	class FileBuffer {
+	class DataBuffer {
 	public:
-		FileBuffer() {
-			FileContent = new uint8_t[MaxBufferSize];
+		DataBuffer() {
+			DataContent = new uint8_t[MaxBufferSize];
 		}
 
-		~FileBuffer() {
-			delete[] FileContent;
+		~DataBuffer() {
+			delete[] DataContent;
 		}
+
 
 		void resize(uint32_t size) {
 			ContentSize = size;
 
 			if (size > MaxBufferSize) {
-				delete[] FileContent;
-				FileContent = new uint8_t[size];
+				delete[] DataContent;
+				DataContent = new uint8_t[size];
 				MaxBufferSize = size;
 			}
 		}
 
 		uint8_t* GetContent() {
-			return FileContent;
+			return DataContent;
 		}
 
 		uint32_t GetSize() {
@@ -101,12 +103,12 @@ public:
 
 		uint32_t MaxBufferSize{ 1024 };		// buffer for decrypted and decompressed content, whole files
 		uint32_t ContentSize{ 0 };			// actual content size
-		uint8_t* FileContent;				// pointer to actual content
+		uint8_t* DataContent;				// pointer to actual content
 	};
 
 	// get file content by specified index
 	// DONT FORGET TO DELETE THE RETURNED POINTER WHEN DONE!
-	ISDM::FileBuffer* GetSingleFile(uint32_t);
+	ISDM::DataBuffer* GetSingleFile(uint32_t);
 
 private:
 
@@ -147,12 +149,28 @@ private:
 		0x0AB4EB00,
 		0xA0A08600,
 		0x5D805600,
-		0xA0A0A600,
+		0xA0A0A600,	//A600
 		0x5D804D00,
 		0x5D807600,
 		0x5D807300,
 		0xA0A0A000
 	};
+
+	/*
+	const uint32_t fileIndentifiers[KEYCOUNT]{
+		0xB438ABEC,
+		0xB038DCCF,
+		0xB038DD08,
+		0x7654A109,
+		0x5D804E11,
+		0xEA859B82,
+		0,				// sounds missing for now
+		0x0AB4EBAE,
+		0xA0A086A9,
+		0x5D805658,
+		0				//0xA0A0A683
+	};
+	*/
 
 	// decryption keys
 	const uint64_t keys[KEYCOUNT]{
@@ -171,7 +189,6 @@ private:
 		0x10ACB2525D8052A0,
 		0x10ACB2525D8052A0,
 		0x10ACB2525D8052A0,
-    // patchx01
 		0xa0a0a0a0a0a0a0a2
 	};
 
@@ -259,36 +276,6 @@ private:
 	////  DEFINITIONS  ////
 	///////////////////////
 
-	// additional block buffer. Very similar to the FileBuffer but used just for
-	// the compressed blocks the archived file splits
-	class BlockBuffer {
-	public:
-		BlockBuffer() {
-			BLOCKcontent = new uint8_t[MaxBufferBLOCK];
-		}
-
-		~BlockBuffer() {
-			delete[] BLOCKcontent;
-		}
-
-		void resizeBLOCK(uint32_t size) {
-			if (size > MaxBufferBLOCK) {
-				delete[] BLOCKcontent;
-				BLOCKcontent = new uint8_t[size];
-				MaxBufferBLOCK = size;
-			}
-		}
-
-		uint8_t* GetBLOCKcontent() {
-			return BLOCKcontent;
-		}
-
-	private:
-
-		uint32_t MaxBufferBLOCK{ 1024 };	// extra buffer to read compressed content, blockwise
-		uint8_t* BLOCKcontent;				// pointer to compressed blocks
-	};
-
 	// 16 byte
 	struct DTA_ArchiveHeader {
 		uint32_t   ahNumOfFiles;			// amount of files within the archive
@@ -305,8 +292,11 @@ private:
 		uint64_t           timeStamp;	// FILETIME format
 		uint32_t           fileSize;	// file size
 		uint32_t           compBlocks;	// Number of compressed blocks
-		uint8_t			       FullFileNameLength;	// full name with path
-		uint8_t			       flags[7];	// flags?
+		uint8_t			   FullFileNameLength;	// full name with path
+		uint8_t			   flags[7];	// flags
+										// Or better not...
+		//char*			   FileNamePtr;	// since these last 4 bytes do not seem to be to used for anything,
+										// I use them to store my pointer
 	};
 
 	// slightly differend ISD1 header
@@ -389,8 +379,7 @@ private:
 	WavHeader wavHeader;
 	bool wavHeaderSet = false;
 	DTA_FileTableRec* dtaFileRecords;
-	BlockBuffer blockBuffer;
-  
+	DataBuffer blockBuffer;
 	///////////////////////
 	////   FUNCTIONS   ////
 	///////////////////////
@@ -401,6 +390,7 @@ private:
 	uint8_t* decompressDPCM(const uint16_t* delta, uint8_t* dest, const uint8_t* BlockSource, uint32_t blockSize);
 	uint8_t* decompressLZSS(uint8_t* dest, const uint8_t* source, uint32_t size);
 	
-	uint16_t CreateFileContent(uint32_t, FileBuffer*);
+	uint16_t CreateFileContent(uint32_t, DataBuffer*);
 	
 };
+
