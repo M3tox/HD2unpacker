@@ -156,22 +156,6 @@ private:
 		0xA0A0A000
 	};
 
-	/*
-	const uint32_t fileIndentifiers[KEYCOUNT]{
-		0xB438ABEC,
-		0xB038DCCF,
-		0xB038DD08,
-		0x7654A109,
-		0x5D804E11,
-		0xEA859B82,
-		0,				// sounds missing for now
-		0x0AB4EBAE,
-		0xA0A086A9,
-		0x5D805658,
-		0				//0xA0A0A683
-	};
-	*/
-
 	// decryption keys
 	const uint64_t keys[KEYCOUNT]{
 		0xf26527fab438d0a5,
@@ -287,27 +271,23 @@ private:
 
 	// default ISD0 header
 	struct DTA_FileHeader {
-		uint32_t           extra1;		// unknown
-		uint32_t           extra2;		// unknown
-		uint64_t           timeStamp;	// FILETIME format
-		uint32_t           fileSize;	// file size
-		uint32_t           compBlocks;	// Number of compressed blocks
-		uint8_t			   FullFileNameLength;	// full name with path
-		uint8_t			   flags[7];	// flags
-										// Or better not...
-		//char*			   FileNamePtr;	// since these last 4 bytes do not seem to be to used for anything,
-										// I use them to store my pointer
+		uint32_t        extra1;			// compressed file size in archive, including header
+		uint32_t        extra2;			// unknown, but it varies between 31 and 33, mostly 32 though
+		uint64_t        timeStamp;		// FILETIME format
+		uint32_t        fileSize;		// file size
+		uint32_t        compBlocks;		// Number of compressed blocks
+		uint8_t		FullFileNameLength;	// full name with path
+		uint8_t		flags[7];		// flags
 	};
 
 	// slightly differend ISD1 header
 	struct DTA_FileHeaderISD1 {
-		uint32_t extra1;		// unknown
-		uint32_t extra2;		// unknown
+		uint32_t extra1;		// compressed file size in archive, including header
+		uint32_t extra2;		// unknown, but it varies between 31 and 33, mostly 32 though
 		uint64_t timeStamp;		// FILETIME
 		uint32_t fileSize;		// Decompressed size
-		uint32_t compBlocks;	// Nums of compressed block for current file data
+		uint32_t compBlocks;		// Nums of compressed block for current file data
 		uint32_t extra3;		// unknown
-		//uint8_t  extra4;		// unknown
 		uint8_t  FullFileNameLength;
 		uint8_t  flags[3];		// flags
 	};
