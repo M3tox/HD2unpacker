@@ -48,7 +48,6 @@ ISDM::ISDM(const std::string& fullPath) {
 	// little hotfix, not very elegant but it works.
 	// the english version of LangEnglish does not match with identifier because it has less files than the german one.
 	// if the key is still not found, it will check if it might be this one as well if its not -> Error
-  // TODO: check also other languages for file differences
 	if (keySelector == -1) {
 		if (0xA0A0B170 == ArchiveHeader.ahNumOfFiles)
 			keySelector = 10;
@@ -89,7 +88,7 @@ ISDM::~ISDM() {
 	delete[] dtaFileRecords;
 }
 
-uint16_t ISDM::CreateFileContent(uint32_t FileID, FileBuffer* fileBuffer) {
+uint16_t ISDM::CreateFileContent(uint32_t FileID, DataBuffer* fileBuffer) {
 
 	dtaFile.clear();
 	dtaFile.seekg(dtaFileRecords[FileID].HeaderOffset);
@@ -131,28 +130,28 @@ uint16_t ISDM::CreateFileContent(uint32_t FileID, FileBuffer* fileBuffer) {
 			// check block information for each one
 			uint32_t SizeOfBlock = Blockheader.BlockSizes[i] & 0xFFFF;
 
-			blockBuffer.resizeBLOCK(SizeOfBlock);
-			dtaFile.read(reinterpret_cast<char*>(blockBuffer.GetBLOCKcontent()), SizeOfBlock);
+			blockBuffer.resize(SizeOfBlock);
+			dtaFile.read(reinterpret_cast<char*>(blockBuffer.GetContent()), SizeOfBlock);
 
 			if (BlockEncryption)
-				Decrypt(blockBuffer.GetBLOCKcontent(), SizeOfBlock);
+				Decrypt(blockBuffer.GetContent(), SizeOfBlock);
 			
 
 			// check which decompression methode has to be used
 			switch (Blockheader.BlockTypes[i]) {
 			case BLOCK_UNCOMPRESSED:
 
-				memcpy(bufferPtr, blockBuffer.GetBLOCKcontent(), SizeOfBlock);
+				memcpy(bufferPtr, blockBuffer.GetContent(), SizeOfBlock);
 				bufferPtr += SizeOfBlock;
 				break;
 
 			case BLOCK_LZSS_RLE:
 
-				bufferPtr = decompressLZSS(bufferPtr, blockBuffer.GetBLOCKcontent(), SizeOfBlock);
+				bufferPtr = decompressLZSS(bufferPtr, blockBuffer.GetContent(), SizeOfBlock);
 				break;
 			default: 
 				// if its not 0 or 1 we expect it to be a wave file format and use DPCM
-				bufferPtr = decompressDPCM(&WAV_DELTAS[128 * ((Blockheader.BlockTypes[i] / 4) - 2)], bufferPtr, blockBuffer.GetBLOCKcontent(), SizeOfBlock);
+				bufferPtr = decompressDPCM(&WAV_DELTAS[128 * ((Blockheader.BlockTypes[i] / 4) - 2)], bufferPtr, blockBuffer.GetContent(), SizeOfBlock);
 				break;
 			}
 		}
@@ -166,6 +165,7 @@ uint16_t ISDM::CreateFileContent(uint32_t FileID, FileBuffer* fileBuffer) {
 		fileBuffer->FileName.resize(FileHeader.FullFileNameLength);
 		dtaFile.read((char*)fileBuffer->FileName.data(), FileHeader.FullFileNameLength);
 		Decrypt((void*)fileBuffer->FileName.data(), FileHeader.FullFileNameLength);
+
 
 		fileBuffer->resize(FileHeader.fileSize);
 
@@ -183,30 +183,30 @@ uint16_t ISDM::CreateFileContent(uint32_t FileID, FileBuffer* fileBuffer) {
 			dtaFile.read((char*)&SizeOfBlock, sizeof(SizeOfBlock));
 			SizeOfBlock = SizeOfBlock & 0xFFFF;
 
-			blockBuffer.resizeBLOCK(SizeOfBlock);		// resize block buffer
+			blockBuffer.resize(SizeOfBlock);		// resize block buffer
 
-			dtaFile.read(reinterpret_cast<char*>(blockBuffer.GetBLOCKcontent()), SizeOfBlock);
+			dtaFile.read(reinterpret_cast<char*>(blockBuffer.GetContent()), SizeOfBlock);
 
 			if (BlockEncryption)
-				Decrypt(blockBuffer.GetBLOCKcontent(), SizeOfBlock);
+				Decrypt(blockBuffer.GetContent(), SizeOfBlock);
 
 			// first element of each block contains the block type
-			uint8_t blockType = *(blockBuffer.GetBLOCKcontent());
+			uint8_t blockType = *(blockBuffer.GetContent());
 
 
 			switch (blockType) {
 			case BLOCK_UNCOMPRESSED:
 				// just copy to file buffer if no compression is given
-				memcpy(bufferPtr, blockBuffer.GetBLOCKcontent()+1, SizeOfBlock - 1);
+				memcpy(bufferPtr, blockBuffer.GetContent()+1, SizeOfBlock - 1);
 				bufferPtr += SizeOfBlock-1;
 				break;
 
 			case BLOCK_LZSS_RLE:
-				bufferPtr = decompressLZSS(bufferPtr, blockBuffer.GetBLOCKcontent() + 1, SizeOfBlock - 1);
+				bufferPtr = decompressLZSS(bufferPtr, blockBuffer.GetContent() + 1, SizeOfBlock - 1);
 				break;
 			default: 
 				// expect wave files
-				bufferPtr = decompressDPCM(&WAV_DELTAS[128 * ((blockType / 4) - 2)], bufferPtr, blockBuffer.GetBLOCKcontent() + 1, SizeOfBlock - 1);
+				bufferPtr = decompressDPCM(&WAV_DELTAS[128 * ((blockType / 4) - 2)], bufferPtr, blockBuffer.GetContent() + 1, SizeOfBlock - 1);
 				break;
 			}
 		}
@@ -262,7 +262,7 @@ bool ISDM::WriteToFile(void* fileContent, uint32_t sizeBytes, std::string& FileN
 			// it is not, write file directly
 			UserPath.append(FileName_str);
 
-			// we are in windows API anyway, so I commented the old code from std library out and use windows functions instead
+			// we are in windows API anyway, so I commented the old code from std library out
 			// and use the functions provided by windows
 			//std::ofstream extractedFile(UserPath, std::ios::binary);
 			//extractedFile.write((char*)fileContent, sizeBytes);
@@ -290,9 +290,9 @@ bool ISDM::WriteToFile(void* fileContent, uint32_t sizeBytes, std::string& FileN
 uint8_t* ISDM::decompressLZSS(uint8_t* dest, const uint8_t* BlockSource, uint32_t blockSize) {
 	// based on HDmaster's research and source but without using vectors
 	// instead, it is writing directly into the file buffer
+	// I also optimized it a bit by using memset and less "for loops"
 
 	uint32_t BlockPosition{ 0 };
-	//uint32_t decompressedPos{ 0 };
 
 	while (BlockPosition < blockSize) {
 
@@ -343,7 +343,6 @@ uint8_t* ISDM::decompressLZSS(uint8_t* dest, const uint8_t* BlockSource, uint32_
 						}
 						else
 						{
-
 							memcpy(dest, dest - offset, length);
 							dest += length;
 						}
@@ -411,7 +410,7 @@ void ISDM::WriteSingleFile(uint32_t fileID, const std::string& savePath) {
 	if (errStatus)
 		return;
 
-	FileBuffer fBuffer;
+	DataBuffer fBuffer;
 	
 	CreateFileContent(fileID, &fBuffer);
 	void* testPtr = fBuffer.GetContent();
@@ -427,7 +426,7 @@ void ISDM::WriteAllFiles() {
 	if (errStatus)
 		return;
 
-	FileBuffer fBuffer;;
+	DataBuffer fBuffer;;
 
 	for (uint32_t exFile = 0; exFile < ArchiveHeader.ahNumOfFiles; exFile++) {
 		CreateFileContent(exFile, &fBuffer);
@@ -444,7 +443,7 @@ void ISDM::WriteAllFiles(uint32_t& currentFile) {
 	if (errStatus)
 		return;
 
-	FileBuffer fBuffer;
+	DataBuffer fBuffer;
 
 	for (; currentFile < ArchiveHeader.ahNumOfFiles; currentFile++) {
 		CreateFileContent(currentFile, &fBuffer);
@@ -465,8 +464,11 @@ void ISDM::WriteAllFiles(
 	if (errStatus)
 		return;
 
-	FileBuffer fBuffer;
-  
+	DataBuffer fBuffer;
+	//int32_t counter{ 0 };
+	//std::ofstream buffFile("TestFileBuffer.txt");
+
+	//for (uint32_t exFile = 0; exFile < dtaFileRecords.size(); exFile++) {
 	while (counter < ArchiveHeader.ahNumOfFiles){
 
 		if (UserCancel)
@@ -479,7 +481,9 @@ void ISDM::WriteAllFiles(
 		SetWindowTextA(ProgressTitle, fBuffer.FileName.c_str());
 		SendMessage(progressBarHandle, PBM_STEPIT, 0, 0);
 		counter++;
+		//buffFile << "File " << exFile+1 << ": " << fBuffer.FileName  << ", Buffer: " << fBuffer.MaxBufferSize << '\n';
 	}
+	//buffFile.close();
 
 	std::string finalMsg;
 	finalMsg.assign("File extraction succesful!\n");
@@ -494,9 +498,9 @@ uint32_t ISDM::GetFileCount() {
 	return ArchiveHeader.ahNumOfFiles;
 }
 
-///////////////////////////////////////////////////////////////////////////
-/////   ADDITIONAL FUNCTIONS FOR DEBUGGING/OBSERVING/ERROR HANDLING   /////
-///////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+/////   ADDITIONAL FUNCTIONS FOR DEBUGGING/OBSERVING   /////
+////////////////////////////////////////////////////////////
 
 // Function is mostly for debugging purpose, writes Table content to a file if needed
 void ISDM::WriteTableRecords(const char* fileName) {
@@ -509,6 +513,9 @@ void ISDM::WriteTableRecords(const char* fileName) {
 
 	TableRecordsFile << "Archive header Information:\n";
 	TableRecordsFile << "Unknown value:                 " << ArchiveHeader.ahExtra << '\n';
+	//for (int j = 0; j < 4; j++)
+	//void* test = &ArchiveHeader.ahExtra;
+	//	printf("%02X", ArchiveHeader.ahExtra);
 	TableRecordsFile << "Table Record size in bytes:    " << ArchiveHeader.ahFileTableSize << '\n';
 	TableRecordsFile << "Table Record at file position: " << ArchiveHeader.ahFileTableOffset << '\n';
 	TableRecordsFile << "Amount of files:               " << ArchiveHeader.ahNumOfFiles << "\n\n";
@@ -666,9 +673,9 @@ const int32_t ISDM::GetFileIndexByHint(const char* NameHint, uint8_t strSize) {
 	return -1;
 }
 
-ISDM::FileBuffer* ISDM::GetSingleFile(uint32_t fileIndex) {
+ISDM::DataBuffer* ISDM::GetSingleFile(uint32_t fileIndex) {
 
-	FileBuffer* Buffer = new FileBuffer;
+	DataBuffer* Buffer = new DataBuffer;
 
 	CreateFileContent(fileIndex, Buffer);
 
